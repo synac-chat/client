@@ -42,16 +42,17 @@ pub fn listen(
                 let duration = Duration::from_secs(common::TYPING_TIMEOUT as u64); // TODO use const fn
                 session.typing.retain(|_, time| time.elapsed() < duration);
 
-                let people = session.typing.keys()
+                let people: Vec<_> = session.typing.keys()
                     .filter_map(|&(author, channel)| {
                         if Some(channel) != session.channel {
                             return None;
                         }
 
-                        session.state.users.get(&author).map(|user| &user.name)
-                    });
+                        session.state.users.get(&author).map(|user| &*user.name)
+                    })
+                    .collect();
 
-                screen.typing_set(get_typing_string(people, session.typing.len()));
+                screen.typing_set(get_typing_string(&*people));
             }
             let packet = listener.try_read(session.inner.inner_stream());
             if let Err(err) = packet {

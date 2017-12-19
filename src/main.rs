@@ -915,21 +915,16 @@ fn parse_addr(input: &str) -> Option<SocketAddr> {
         .and_then(|mut addrs| addrs.next())
 }
 
-fn get_typing_string<I, V>(mut people: I, len: usize) -> String
-    where I: Iterator<Item = V>,
-          V: AsRef<str> {
-    macro_rules! next {
-        () => { people.next().unwrap().as_ref() }
-    }
-    match len {
+fn get_typing_string(people: &[&str]) -> String {
+    match people.len() {
         n if n > 500 => String::from("(╯°□°）╯︵ ┻━┻"),
         n if n > 100 => String::from("A crap ton of people are typing"),
         n if n > 50 => String::from("Over 50 people are typing"),
         n if n > 10 => String::from("Over 10 people are typing"),
         n if n > 3 => String::from("Several people are typing"),
-        3 => format!("{}, {} and {} are typing", next!(), next!(), next!()),
-        2 => format!("{} and {} are typing", next!(), next!()),
-        1 => format!("{} is typing", next!()),
+        3 => format!("{}, {} and {} are typing", people[0], people[1], people[2]),
+        2 => format!("{} and {} are typing", people[0], people[1]),
+        1 => format!("{} is typing", people[0]),
         _ => String::new()
     }
 }
