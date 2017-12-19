@@ -655,7 +655,7 @@ fn main() {
                     ).unwrap();
                 },
                 "update" => {
-                    usage!(2, "update <\"channel\"/\"group\"> <id>");
+                    usage!(2, "update <\"channel\"/\"group\"/\"user\"> <id>");
 
                     let mut session = session.lock().unwrap();
                     let session = require_session!(session);
