@@ -300,12 +300,12 @@ impl Screen {
     pub fn get_channel_overrides(&self, mut overrides: HashMap<usize, (u8, u8)>, session: &Session)
             -> Result<HashMap<usize, (u8, u8)>, ()> {
         let _guard = self.mute();
-        let log = Vec::with_capacity(2);
+        let mut log = Vec::with_capacity(2);
 
         macro_rules! println {
-            () => { self.log(String::new()); };
-            ($arg:expr) => { self.log(String::from($arg)); };
-            ($($arg:expr),*) => { self.log(format!($($arg),*)); };
+            () => { log.push((String::new(), LogEntryId::None)); };
+            ($arg:expr) => { log.push((String::from($arg), LogEntryId::None)); };
+            ($($arg:expr),*) => { log.push((format!($($arg),*), LogEntryId::None)); };
         }
 
         loop {
@@ -373,12 +373,12 @@ impl Screen {
     }
     pub fn get_user_groups(&self, mut groups: Vec<usize>, session: &Session) -> Result<Vec<usize>, ()> {
         let _guard = self.mute();
-        let log = Vec::with_capacity(2);
+        let mut log = Vec::with_capacity(2);
 
         macro_rules! println {
-            () => { self.log(String::new()); };
-            ($arg:expr) => { self.log(String::from($arg)); };
-            ($($arg:expr),*) => { self.log(format!($($arg),*)); };
+            () => { log.push((String::new(), LogEntryId::None)); };
+            ($arg:expr) => { log.push((String::from($arg), LogEntryId::None)); };
+            ($($arg:expr),*) => { log.push((format!($($arg),*), LogEntryId::None)); };
         }
 
         loop {
