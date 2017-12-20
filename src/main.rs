@@ -679,7 +679,7 @@ fn main() {
                                             continue;
                                         };
                             let mut channel_mode = None;
-                            let mut admin = if admin != user.admin {
+                            let admin = if admin != user.admin {
                                 Some(admin)
                             } else {
                                 if let Some(channel) = session.channel {
