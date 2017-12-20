@@ -1,7 +1,7 @@
 [package]
 authors = ["jD91mZM2 <me@krake.one>"]
 name = "client"
-version = "0.3.7"
+version = "0.4.0"
 [dependencies]
 openssl = "0.9.23"
 rusqlite = "0.13.0"
