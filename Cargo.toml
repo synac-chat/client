@@ -6,7 +6,5 @@ version = "0.4.0"
 openssl = "0.9.23"
 rusqlite = "0.13.0"
 rustyline = "1.0.0"
+synac = "0.3.0"
 termion = "1.5.1"
-
-[dependencies.synac]
-path = "../synac-rs"
