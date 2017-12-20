@@ -137,12 +137,6 @@ pub fn listen(
                             session.typing.insert((event.author, event.channel), Instant::now());
                         }
                     },
-                    Packet::Err(common::ERR_GROUP_INVALID_POS) => {
-                        println!("Invalid group position");
-                    },
-                    Packet::Err(common::ERR_GROUP_LOCKED_NAME) => {
-                        println!("Can not change the name of that group");
-                    },
                     Packet::Err(common::ERR_LIMIT_REACHED) => {
                         println!("Too short or too long. No idea which");
                     },
@@ -157,9 +151,6 @@ pub fn listen(
                     },
                     Packet::Err(common::ERR_UNKNOWN_CHANNEL) => {
                         println!("This channel was deleted");
-                    },
-                    Packet::Err(common::ERR_UNKNOWN_GROUP) => {
-                        println!("This group was deleted");
                     },
                     Packet::Err(err) => {
                         println!("Unimplemented error: {:?}", err);

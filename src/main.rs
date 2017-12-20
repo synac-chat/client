@@ -245,8 +245,9 @@ fn main() {
                     };
 
                     let packet = Packet::UserUpdate(common::UserUpdate {
+                        admin: None,
                         ban: Some(command == "ban"),
-                        groups: None,
+                        channel_mode: None,
                         id: id
                     });
                     write!(session, packet, {})
@@ -280,24 +281,9 @@ fn main() {
                                 name.drain(..1);
                             }
                             Packet::ChannelCreate(common::ChannelCreate {
-                                overrides: HashMap::new(),
+                                default_mode_bot: 0,
+                                default_mode_user: common::PERM_READ | common::PERM_WRITE,
                                 name: name
-                            })
-                        },
-                        "group" => {
-                            usage_max!(3, "create group <name> [data]");
-                            let (mut allow, mut deny) = (0, 0);
-                            if args.len() == 3 && !from_perm_string(&*args[2], &mut allow, &mut deny) {
-                                println!("Invalid permission string");
-                                continue;
-                            }
-                            let max = session.state.groups.values().max_by_key(|item| item.pos);
-                            Packet::GroupCreate(common::GroupCreate {
-                                allow: allow,
-                                deny: deny,
-                                name: args.remove(1),
-                                pos: max.map_or(1, |item| item.pos+1),
-                                unassignable: false
                             })
                         },
                         _ => { println!("Unable to create that"); continue; }
@@ -305,7 +291,7 @@ fn main() {
                     write!(session, packet, {})
                 },
                 "delete" => {
-                    usage!(2, "delete <\"channel\"/\"group\"/\"message\"> <id>");
+                    usage!(2, "delete <\"channel\"/\"message\"> <id>");
 
                     let mut session = session.lock().unwrap();
                     let session = require_session!(session);
@@ -318,11 +304,6 @@ fn main() {
                     };
 
                     let packet = match &*args[0] {
-                        "group" => if session.state.groups.contains_key(&id) {
-                            Some(Packet::GroupDelete(common::GroupDelete {
-                                id: id
-                            }))
-                        } else { None },
                         "channel" => if session.state.channels.contains_key(&id) {
                             Some(Packet::ChannelDelete(common::ChannelDelete {
                                 id: id
@@ -368,7 +349,7 @@ fn main() {
                     help::help(&*borrowed, &screen);
                 },
                 "info" => {
-                    usage!(1, "info <channel/group/user>");
+                    usage!(1, "info <channel/user>");
                     let mut session = session.lock().unwrap();
                     let session = require_session!(session);
                     let mut name = &*args[0];
@@ -385,38 +366,23 @@ fn main() {
                             || Ok(channel.id) == id {
                             println!("Channel #{}", channel.name);
                             println!("ID: #{}", channel.id);
-                            for (id, &(allow, deny)) in &channel.overrides {
-                                println!("Permission override: Role #{} = {}", id, to_perm_string(allow, deny));
-                            }
-                        }
-                    }
-                    for group in session.state.groups.values() {
-                        if name == group.name || Ok(group.id) == id {
-                            println!("Group {}", group.name);
-                            println!("Permission: {}", to_perm_string(group.allow, group.deny));
-                            println!("ID: #{}", group.id);
-                            println!("Position: {}", group.pos);
+                            println!("Default mode for bots: {}", to_perm_string(channel.default_mode_bot));
+                            println!("Default mode for users: {}", to_perm_string(channel.default_mode_user));
                         }
                     }
                     for user in session.state.users.values() {
                         if name == user.name || Ok(user.id) == id {
                             println!("User {}", user.name);
-                            println!(
-                                "Groups: [{}]",
-                                user.groups.iter()
-                                    .fold(String::new(), |mut acc, id| {
-                                        if !acc.is_empty() {
-                                            acc.push_str(", ");
-                                        }
-                                        acc.push_str(&id.to_string());
-                                        acc
-                                    })
-                            );
                             if user.ban {
                                 println!("Banned.");
                             }
                             println!("Bot: {}", if user.bot { "true" } else { "false" });
                             println!("ID: #{}", user.id);
+                            for (&channel, &mode) in &user.modes {
+                                if let Some(channel) = session.state.channels.get(&channel) {
+                                    println!("Channel #{} mode: {}", channel.name, to_perm_string(mode));
+                                }
+                            }
                         }
                     }
                 },
@@ -469,20 +435,8 @@ fn main() {
                             });
                             println!(result);
                         },
-                        "groups" => {
-                            // Read the above comment, thank you ---------------------------^
-                            let mut groups: Vec<_> = session.state.groups.values().collect();
-                            groups.sort_by_key(|item| &item.pos);
-
-                            let result = groups.iter().fold(String::new(), |mut acc, group| {
-                                if !acc.is_empty() { acc.push_str(", "); }
-                                acc.push_str(&group.name);
-                                acc
-                            });
-                            println!(result);
-                        },
                         "users" => {
-                            // something something above comment
+                            // Read the above comment, thank you ---------------------------^
                             let mut users: Vec<_> = session.state.users.values().collect();
                             users.sort_by_key(|item| &item.name);
 
@@ -655,7 +609,7 @@ fn main() {
                     ).unwrap();
                 },
                 "update" => {
-                    usage!(2, "update <\"channel\"/\"group\"/\"user\"> <id>");
+                    usage!(2, "update <\"channel\"/\"user\"> <id>");
 
                     let mut session = session.lock().unwrap();
                     let session = require_session!(session);
@@ -668,51 +622,6 @@ fn main() {
                     };
 
                     let packet = match &*args[0] {
-                        "group" => if let Some(group) = session.state.groups.get(&id) {
-                            let (mut allow, mut deny) = (group.allow, group.deny);
-
-                            println!("Editing: {}", group.name);
-                            println!("(Press enter to keep current value)");
-                            println!();
-                            println!("Name [{}]: ", group.name);
-
-                            let name = readline!({ continue; });
-                            let mut name = name.trim();
-                            if name.is_empty() { name = &group.name };
-
-                            println!("Permission [{}]: ", to_perm_string(allow, deny));
-                            let perms = readline!({ continue; });
-                            if !from_perm_string(&perms, &mut allow, &mut deny) {
-                                println!("Invalid permission string");
-                                continue;
-                            }
-
-                            println!("Position [{}]: ", group.pos);
-                            let pos = readline!({ continue; });
-                            let pos = pos.trim();
-                            let pos = if pos.is_empty() {
-                                group.pos
-                            } else {
-                                match pos.parse() {
-                                    Ok(ok) => ok,
-                                    Err(_) => {
-                                        println!("Not a valid number");
-                                        continue;
-                                    }
-                                }
-                            };
-
-                            Some(Packet::GroupUpdate(common::GroupUpdate {
-                                inner: common::Group {
-                                    allow: allow,
-                                    deny: deny,
-                                    id: group.id,
-                                    name: name.to_string(),
-                                    pos: pos,
-                                    unassignable: group.unassignable
-                                }
-                            }))
-                        } else { None },
                         "channel" => if let Some(channel) = session.state.channels.get(&id) {
                             println!("Editing: #{}", channel.name);
                             println!("(Press enter to keep current value)");
@@ -723,28 +632,82 @@ fn main() {
                             let mut name = name.trim();
                             if name.is_empty() { name = &channel.name }
 
-                            let overrides = match screen.get_channel_overrides(channel.overrides.clone(), session) {
-                                Ok(ok) => ok,
-                                Err(_) => continue
+                            println!("Default mode for bots [{}]: ", to_perm_string(channel.default_mode_bot));
+                            let default_mode_bot = readline!({ continue; });
+                            let default_mode_bot = if default_mode_bot.trim().is_empty() {
+                                channel.default_mode_bot
+                            } else {
+                                let mut bitmask = channel.default_mode_bot;
+                                if !from_perm_string(&default_mode_bot, &mut bitmask) {
+                                    println!("Invalid permission string.");
+                                    continue;
+                                }
+                                bitmask
                             };
+                            println!("Default mode for users [{}]: ", to_perm_string(channel.default_mode_user));
+                            let default_mode_user = readline!({ continue; });
+                            let default_mode_user = if default_mode_user.trim().is_empty() {
+                                channel.default_mode_user
+                            } else {
+                                let mut bitmask = channel.default_mode_user;
+                                if !from_perm_string(&default_mode_user, &mut bitmask) {
+                                    println!("Invalid permission string.");
+                                    continue;
+                                }
+                                bitmask
+                            };
+                            println!("{:?}", default_mode_user);
 
                             Some(Packet::ChannelUpdate(common::ChannelUpdate {
                                 inner: common::Channel {
+                                    default_mode_bot: default_mode_bot,
+                                    default_mode_user: default_mode_user,
                                     id: channel.id,
-                                    name: name.to_string(),
-                                    overrides: overrides
-                                },
-                                keep_overrides: false
+                                    name: name.to_string()
+                                }
                             }))
                         } else { None },
                         "user" => if let Some(user) = session.state.users.get(&id) {
-                            let groups = match screen.get_user_groups(user.groups.clone(), session) {
-                                Ok(ok) => ok,
-                                Err(_) => continue
+                            println!("Admin [{}]: ", user.admin);
+                            let admin = readline!({ continue; });
+                            let admin = admin.trim();
+                            let admin = if admin.is_empty() { user.admin }
+                                        else if admin == "true" { true }
+                                        else if admin == "false" { false }
+                                        else {
+                                            println!("Invalid boolean");
+                                            continue;
+                                        };
+                            let mut channel_mode = None;
+                            let mut admin = if admin != user.admin {
+                                Some(admin)
+                            } else {
+                                if let Some(channel) = session.channel {
+                                    if let Some(channel) = session.state.channels.get(&channel) {
+                                        let mut mode = user.modes.get(&channel.id).cloned().unwrap_or_default();
+                                        println!("Mode in #{} [{}]: ", channel.name, to_perm_string(mode));
+                                        println!("Type r to remove");
+                                        let new_mode = readline!({ continue; });
+                                        let new_mode = new_mode.trim();
+                                        let mode = if new_mode == "r" {
+                                            None
+                                        } else if !new_mode.trim().is_empty() {
+                                            if !from_perm_string(&new_mode, &mut mode) {
+                                                println!("Invalid permission string");
+                                                continue;
+                                            }
+                                            Some(mode)
+                                        } else { Some(mode) };
+                                        channel_mode = Some((channel.id, mode));
+                                    }
+                                }
+                                None
                             };
+
                             Some(Packet::UserUpdate(common::UserUpdate {
+                                admin: admin,
                                 ban: None,
-                                groups: Some(groups),
+                                channel_mode: channel_mode,
                                 id: id
                             }))
                         } else { None },
@@ -833,35 +796,18 @@ fn main() {
 fn find_user<'a>(users: &'a HashMap<usize, common::User>, name: &str) -> Option<&'a common::User> {
     users.values().find(|user| user.name == name)
 }
-fn to_perm_string(allow: u8, deny: u8) -> String {
-    let mut result = String::with_capacity(10);
+fn to_perm_string(bitmask: u8) -> String {
+    let mut result = String::with_capacity(5);
 
-    if allow != 0 {
+    if bitmask != 0 {
         result.push('+');
-        result.push_str(&to_single_perm_string(allow));
     }
-    if deny != 0 {
-        result.push('-');
-        result.push_str(&to_single_perm_string(deny));
-    }
-
-    result.shrink_to_fit();
-    result
-}
-fn to_single_perm_string(bitmask: u8) -> String {
-    let mut result = String::with_capacity(4);
 
     if bitmask & common::PERM_READ == common::PERM_READ {
         result.push('r');
     }
     if bitmask & common::PERM_WRITE == common::PERM_WRITE {
         result.push('w');
-    }
-    if bitmask & common::PERM_ASSIGN_GROUPS == common::PERM_ASSIGN_GROUPS {
-        result.push('s');
-    }
-    if bitmask & common::PERM_MANAGE_GROUPS == common::PERM_MANAGE_GROUPS {
-        result.push('a');
     }
     if bitmask & common::PERM_MANAGE_CHANNELS == common::PERM_MANAGE_CHANNELS {
         result.push('c');
@@ -870,32 +816,28 @@ fn to_single_perm_string(bitmask: u8) -> String {
         result.push('m');
     }
 
+    result.shrink_to_fit();
     result
 }
-fn from_perm_string(input: &str, allow: &mut u8, deny: &mut u8) -> bool {
-    let mut mode = '+';
+fn from_perm_string(input: &str, bitmask: &mut u8) -> bool {
+    let mut add = true;
 
     for c in input.chars() {
-        if c == '+' || c == '-' || c == '=' {
-            mode = c;
-            continue;
-        }
         let perm = match c {
+            '+' => { add = true; continue; },
+            '-' => { add = false; continue; },
             'r' => common::PERM_READ,
             'w' => common::PERM_WRITE,
 
-            's' => common::PERM_ASSIGN_GROUPS,
             'c' => common::PERM_MANAGE_CHANNELS,
-            'g' => common::PERM_MANAGE_GROUPS,
             'm' => common::PERM_MANAGE_MESSAGES,
             ' ' => continue,
             _   => return false
         };
-        match mode {
-            '+' => { *allow |= perm; *deny &= !perm; },
-            '-' => { *allow &= !perm; *deny |= perm },
-            '=' => { *allow &= !perm; *deny &= !perm }
-            _   => unreachable!()
+        if add {
+            *bitmask |= perm;
+        } else {
+            *bitmask &= !perm;
         }
     }
 

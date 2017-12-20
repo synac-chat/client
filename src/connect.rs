@@ -200,7 +200,7 @@ pub fn write(
     if let Err(err) = session.inner.send(packet) {
         screen.log(String::from("Sending failed."));
         screen.log(format!("{}", err));
-        if let synac::Error::IoError(err) = err {
+        if let Ok(err) = err.downcast::<std::io::Error>() {
             reconnect(&connector, &err, screen, session);
         }
         return false;
