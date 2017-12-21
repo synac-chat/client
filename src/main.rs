@@ -2,6 +2,7 @@ extern crate openssl;
 extern crate rusqlite;
 extern crate rustyline;
 extern crate synac;
+extern crate xdg;
 
 use synac::State;
 use synac::common::{self, Packet};
@@ -10,11 +11,11 @@ use std::collections::HashMap;
 use std::env;
 use std::fs;
 use std::net::SocketAddr;
-use std::path::PathBuf;
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex, RwLock};
 use std::thread;
 use std::time::{Duration, Instant};
+use xdg::BaseDirectories;
 
 mod connect;
 mod frontend;
@@ -60,52 +61,43 @@ impl Session {
 
 fn main() {
     let session: Arc<Mutex<Option<Session>>> = Arc::new(Mutex::new(None));
-    let screen = Arc::new(frontend::Screen::new(&session));
 
-    // See https://github.com/rust-lang/rust/issues/35853
-    macro_rules! println {
-        () => { screen.log(String::new()); };
-        ($arg:expr) => { screen.log(String::from($arg)); };
-        ($($arg:expr),*) => { screen.log(format!($($arg),*)); };
-    }
-    macro_rules! readline {
-        ($break:block) => {
-            match screen.readline() {
-                Ok(ok) => ok,
-                Err(_) => $break
+    let basedirs = match BaseDirectories::with_prefix("synac") {
+        Ok(basedirs) => basedirs,
+        Err(err) => {
+            eprintln!("Failed to get XDG basedirs");
+            eprintln!("{}", err);
+            return;
+        }
+    };
+
+    let data_path;
+    if let Some(path) = basedirs.find_data_file("data2.sqlite") {
+        data_path = path;
+    } else {
+        let mut rename = None;
+        if let Some(path) = basedirs.find_config_file("data.sqlite") {
+            rename = Some(path);
+        }
+        match basedirs.place_data_file("data2.sqlite") {
+            Ok(path) => {
+                if let Some(path1) = rename {
+                    if let Err(err) = fs::rename(&path1, &path) {
+                        eprintln!("Failed to move old sqlite config to new one");
+                        eprintln!("{}", err);
+                    }
+                }
+                data_path = path;
+            },
+            Err(err) => {
+                eprintln!("Failed to place data file");
+                eprintln!("{}", err);
+                return;
             }
         }
     }
-    macro_rules! readpass {
-        ($break:block) => {
-            match screen.readpass() {
-                Ok(ok) => ok,
-                Err(_) => $break
-            }
-        }
-    }
 
-    #[cfg(unix)]
-    let path = env::var("XDG_CONFIG_HOME").ok().map(|item| PathBuf::from(item)).or_else(|| {
-        env::home_dir().map(|mut home| {
-            home.push(".config");
-            home
-        })
-    }).map(|mut path| {
-        path.push("synac");
-        path
-    });
-    #[cfg(not(unix))]
-    let path = None;
-
-    let mut path = path.unwrap_or_else(PathBuf::new);
-    if let Err(err) = fs::create_dir_all(&path) {
-        eprintln!("Failed to create all directories");
-        eprintln!("{}", err);
-        return;
-    }
-    path.push("data.sqlite");
-    let db = match SqlConnection::open(&path) {
+    let db = match SqlConnection::open(&data_path) {
         Ok(ok) => ok,
         Err(err) => {
             eprintln!("Failed to open database");
@@ -148,6 +140,31 @@ fn main() {
     };
 
     let db = Arc::new(Mutex::new(db));
+
+    let screen = Arc::new(frontend::Screen::new(&session));
+    // See https://github.com/rust-lang/rust/issues/35853
+    macro_rules! println {
+        () => { screen.log(String::new()); };
+        ($arg:expr) => { screen.log(String::from($arg)); };
+        ($($arg:expr),*) => { screen.log(format!($($arg),*)); };
+    }
+    macro_rules! readline {
+        ($break:block) => {
+            match screen.readline() {
+                Ok(ok) => ok,
+                Err(_) => $break
+            }
+        }
+    }
+    macro_rules! readpass {
+        ($break:block) => {
+            match screen.readpass() {
+                Ok(ok) => ok,
+                Err(_) => $break
+            }
+        }
+    }
+
 
     println!("Welcome, {}", nick);
     println!("To quit, type /quit");
