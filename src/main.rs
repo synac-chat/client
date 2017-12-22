@@ -106,7 +106,7 @@ fn main() {
         }
     };
     db.execute("CREATE TABLE IF NOT EXISTS data (
-                    key     TEXT NOT NULL UNIQUE,
+                    key     TEXT NOT NULL PRIMARY KEY UNIQUE,
                     value   TEXT NOT NULL
                 )", &[])
         .expect("Couldn't create SQLite table");
