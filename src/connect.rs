@@ -185,7 +185,7 @@ pub fn reconnect(
 ) {
     if err.kind() == std::io::ErrorKind::BrokenPipe {
         screen.log(String::from("Attempting reconnect..."));
-        if let Some(new) = connect(session.addr, &connector, screen) {
+        if let Some(new) = connect(session.addr, connector, screen) {
             *session = new;
         }
     }
@@ -201,7 +201,7 @@ pub fn write(
         screen.log(String::from("Sending failed."));
         screen.log(format!("{}", err));
         if let Ok(err) = err.downcast::<std::io::Error>() {
-            reconnect(&connector, &err, screen, session);
+            reconnect(connector, &err, screen, session);
         }
         return false;
     }

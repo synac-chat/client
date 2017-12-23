@@ -194,7 +194,7 @@ fn main() {
     let screen_clone  = Arc::clone(&screen);
     let session_clone = Arc::clone(&session);
     let thread = thread::spawn(move || {
-        listener::listen(db_clone, screen_clone, tx_sent, session_clone, rx_stop);
+        listener::listen(&db_clone, &screen_clone, &tx_sent, &session_clone, &rx_stop);
     });
 
     loop {
@@ -709,7 +709,7 @@ fn main() {
                                         let mode = if new_mode == "r" {
                                             None
                                         } else if !new_mode.trim().is_empty() {
-                                            if !from_perm_string(&new_mode, &mut mode) {
+                                            if !from_perm_string(new_mode, &mut mode) {
                                                 println!("Invalid permission string");
                                                 continue;
                                             }

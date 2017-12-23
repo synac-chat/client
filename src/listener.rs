@@ -10,11 +10,11 @@ use std::time::Duration;
 use frontend;
 
 pub fn listen(
-    db: Arc<Mutex<SqlConnection>>,
-    screen: Arc<frontend::Screen>,
-    tx_sent: mpsc::SyncSender<()>,
-    session: Arc<Mutex<Option<Session>>>,
-    rx_stop: mpsc::Receiver<()>
+    db: &Arc<Mutex<SqlConnection>>,
+    screen: &Arc<frontend::Screen>,
+    tx_sent: &mpsc::SyncSender<()>,
+    session: &Arc<Mutex<Option<Session>>>,
+    rx_stop: &mpsc::Receiver<()>
 ) {
     macro_rules! println {
         () => { screen.log(String::new()); };
@@ -80,15 +80,15 @@ pub fn listen(
 
                         if let Some(user) = session.state.users.get(&msg.author) {
                             if session.channel == Some(msg.channel) {
+                                let mut string = String::from_utf8_lossy(&msg.text).into_owned();
+                                frontend::sanitize(&mut string);
+
                                 screen.log_with_id(
                                     format!(
                                         "{} (ID #{}): {}",
                                         user.name,
                                         msg.id,
-                                        frontend::sanitize(
-                                            String::from_utf8_lossy(&msg.text)
-                                                .into_owned()
-                                        )
+                                        string
                                     ),
                                     LogEntryId::Message(msg.id)
                                 );
@@ -157,7 +157,7 @@ pub fn listen(
                     },
                     _ => {}
                 }
-                screen.update(&session);
+                screen.update(session);
                 let _ = tx_sent.try_send(());
             }
         }

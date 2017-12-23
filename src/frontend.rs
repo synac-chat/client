@@ -10,14 +10,14 @@ use std::cmp;
 use std::io::{self, Write};
 use std::sync::{Mutex, RwLock};
 
-pub fn sanitize(text: String) -> String {
+pub fn sanitize(text: &mut String) {
     // text.retain(|c| {
     //     !c.is_control() || c == '\n' || c == '\t'
     // });
     // YES, that's right. Until that's stabilized, I'd rather clone the entire string
     // than using difficult workarounds.
     // TODO: Use `retain` to avoid allocation.
-    text.chars().filter(|c| !c.is_control() || *c == '\n' || *c == '\t').collect()
+    *text = text.chars().filter(|c| !c.is_control() || *c == '\n' || *c == '\t').collect();
 }
 
 struct Completer {
@@ -27,7 +27,7 @@ struct Completer {
 impl RustyCompleter for Completer {
     fn complete(&self, line: &str, pos: usize) -> Result<(usize, Vec<String>), ReadlineError> {
         let break_chars = &[' ', '"', '\''].into_iter().cloned().collect();
-        let (start, word) = extract_word(line, pos, &break_chars);
+        let (start, word) = extract_word(line, pos, break_chars);
 
         let mut output = Vec::new();
 
@@ -146,12 +146,11 @@ impl Screen {
         let mut index = 0;
         let mut status = |stdout: &mut AlternateScreen<io::Stdout>, left| {
             if let Some(text) = status.get(index) {
-                let mut text = &text as &str;
-                let mut ellipsis = "";
-                if text.len() > 11 {
+                let mut text = text as &str;
+                let ellipsis = if text.len() > 11 {
                     text = &text[..10];
-                    ellipsis = "…";
-                }
+                    "…"
+                } else { "" };
                 index += 1;
                 writeln!(stdout, "{}{}{}", cursor::Right(cw + 2 - left), text, ellipsis).unwrap();
             } else {
