@@ -82,7 +82,8 @@ pub fn connect(
             },
             Ok(Packet::Err(code)) => match code {
                 common::ERR_LOGIN_INVALID |
-                common::ERR_MISSING_FIELD => {},
+                common::ERR_MISSING_FIELD |
+                common::ERR_UNKNOWN_USER => {},
                 common::ERR_LIMIT_REACHED => {
                     println!("Username too long");
                     return None;
