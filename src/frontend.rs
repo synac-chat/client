@@ -126,8 +126,17 @@ impl Screen {
         status.push(String::from("Channels:"));
         for channel in session.state.channels.values() {
             let mut string = String::with_capacity(2 + channel.name.len());
-            string.push_str(" #");
-            string.push_str(&channel.name);
+            if channel.private {
+                string.push_str("* ");
+                if let Some(recipient) = session.state.get_recipient_unchecked(channel.id) {
+                    string.push_str(&recipient.name);
+                } else {
+                    string.push_str("unknown");
+                }
+            } else {
+                string.push_str(" #");
+                string.push_str(&channel.name);
+            }
             status.push(string);
         }
         status[2..].sort_unstable();

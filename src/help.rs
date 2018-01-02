@@ -71,9 +71,8 @@ pub fn help(query: &[&str], screen: &::frontend::Screen) {
     }
     if all || query.contains(&"msg") {
         screen.log("\
-            /msg <user> <message>\n\
-            Sends <message> in encrypted form privately to <user>.\n\
-            See /setupkeys.\
+            /msg <user>\n\
+            Opens a private channel with <user>.\
         ".to_string());
     }
     if all || query.contains(&"nick") {

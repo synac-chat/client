@@ -98,37 +98,6 @@ pub fn listen(
                             }
                         }
                     },
-                    Packet::PMReceive(msg) => {
-                        let db = db.lock().unwrap();
-                        let mut stmt = db.prepare_cached("SELECT private FROM pms WHERE recipient = ?")
-                            .unwrap();
-                        let mut rows = stmt.query(&[&(msg.author as i64)]).unwrap();
-
-                        if let Some(row) = rows.next() {
-                            let row = row.unwrap();
-
-                            use openssl::rsa::Rsa;
-                            match Rsa::private_key_from_pem(&row.get::<_, Vec<u8>>(0)) {
-                                Ok(rsa) => {
-                                    if let Ok(decrypted) = synac::decrypt(&msg.text, &rsa) {
-                                        let user = session.state.users.get(&msg.author)
-                                            .map(|user| &*user.name)
-                                            .unwrap_or("unknown");
-                                        println!(
-                                            "{} privately messaged you: {}",
-                                            user,
-                                            String::from_utf8_lossy(&decrypted)
-                                        );
-                                    }
-                                },
-                                Err(err) => {
-                                    println!("Failed to deserialize PEM.");
-                                    println!("Did you edit the SQLite database?");
-                                    println!("Details: {}", err);
-                                }
-                            }
-                        }
-                    }
                     Packet::RateLimited(time) => {
                         println!("Slow down! You may try again in {} seconds.", time);
                     },
@@ -136,6 +105,9 @@ pub fn listen(
                         if event.author != session.id {
                             session.typing.insert((event.author, event.channel), Instant::now());
                         }
+                    },
+                    Packet::Err(common::ERR_ALREADY_EXISTS) => {
+                        println!("Already exists");
                     },
                     Packet::Err(common::ERR_LIMIT_REACHED) => {
                         println!("Too short or too long. No idea which");
@@ -146,8 +118,8 @@ pub fn listen(
                     Packet::Err(common::ERR_MISSING_PERMISSION) => {
                         println!("Missing permission");
                     },
-                    Packet::Err(common::ERR_NAME_TAKEN) => {
-                        println!("Name is already taken")
+                    Packet::Err(common::ERR_SELF_PM) => {
+                        println!("Can't send a PM to yourself");
                     },
                     Packet::Err(common::ERR_UNKNOWN_CHANNEL) => {
                         println!("This channel was deleted");

@@ -110,12 +110,6 @@ fn main() {
                     value   TEXT NOT NULL
                 )", &[])
         .expect("Couldn't create SQLite table");
-    db.execute("CREATE TABLE IF NOT EXISTS pms (
-                    private     BLOB NOT NULL,
-                    public      BLOB NOT NULL,
-                    recipient   INTEGER NOT NULL PRIMARY KEY
-                )", &[])
-        .expect("Couldn't create SQLite table");
     db.execute("CREATE TABLE IF NOT EXISTS servers (
                     ip      TEXT NOT NULL PRIMARY KEY,
                     key     BLOB NOT NULL,
@@ -300,7 +294,8 @@ fn main() {
                             Packet::ChannelCreate(common::ChannelCreate {
                                 default_mode_bot: 0,
                                 default_mode_user: common::PERM_READ | common::PERM_WRITE,
-                                name: name
+                                name: name,
+                                recipient: None
                             })
                         },
                         _ => { println!("Unable to create that"); continue; }
@@ -474,11 +469,12 @@ fn main() {
                     }
                 },
                 "msg" => {
-                    usage!(2, "msg <user> <message>");
+                    usage!(1, "msg <user>");
                     let mut session = session.lock().unwrap();
                     let session = require_session!(session);
 
-                    let packet = {
+                    // lifetime issues
+                    let (channel, user) = {
                         let user = match find_user(&session.state.users, &args[0]) {
                             Some(user) => user,
                             None => {
@@ -487,46 +483,35 @@ fn main() {
                             }
                         };
 
-                        let public = {
-                            let db = db.lock().unwrap();
-                            let mut stmt = db.prepare_cached("SELECT public FROM pms WHERE recipient = ?").unwrap();
-                            let mut rows = stmt.query(&[&(user.id as i64)]).unwrap();
-
-                            if let Some(row) = rows.next() {
-                                let row = row.unwrap();
-                                row.get::<_, String>(0)
-                            } else {
-                                println!("Please run `/setupkeys {}` first", user.name);
-                                continue;
-                            }
-                        };
-                        use openssl::rsa::Rsa;
-                        let rsa = match Rsa::public_key_from_pem(public.as_bytes()) {
-                            Ok(ok) => ok,
-                            Err(err) => {
-                                println!("Error! Is that valid PEM data?");
-                                println!("Details: {}", err);
-                                continue;
-                            }
-                        };
-                        Packet::PrivateMessage(common::PrivateMessage {
-                            text: match synac::encrypt(args[1].as_bytes(), &rsa) {
-                                Ok(ok) => ok,
-                                Err(err) => {
-                                    println!("Error! Failed to encrypt! D:");
-                                    println!("{}", err);
-                                    continue;
-                                }
-                            },
-                            recipient: user.id
-                        })
+                        (session.state.get_private_channel(&user).map(|channel| channel.id), user.id)
                     };
+
+                    if channel.is_none() {
+                        let packet = Packet::ChannelCreate(common::ChannelCreate {
+                            default_mode_bot: 0,
+                            default_mode_user: 0,
+                            name: String::new(),
+                            recipient: Some(user)
+                        });
+                        write!(session, packet, { continue; });
+
+                        println!("Creating channel with <user>...");
+                        println!("Type command again to switch to it.");
+                        continue;
+                    }
+
+                    let channel = channel.unwrap();
+
+                    session.channel = Some(channel);
+                    screen.clear();
+                    println!("Joined private channel");
+                    let packet = Packet::MessageList(common::MessageList {
+                        after: None,
+                        before: None,
+                        channel: channel,
+                        limit: common::LIMIT_BULK
+                    });
                     write!(session, packet, {});
-                    println!(
-                        "You privately messaged {}: {}",
-                        args[0],
-                        args[1]
-                    );
                 },
                 "nick" => {
                     usage!(1, "nick <name>");
@@ -680,7 +665,8 @@ fn main() {
                                     default_mode_bot: default_mode_bot,
                                     default_mode_user: default_mode_user,
                                     id: channel.id,
-                                    name: name.to_string()
+                                    name: name.to_string(),
+                                    private: false
                                 }
                             }))
                         } else { None },
