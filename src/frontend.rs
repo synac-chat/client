@@ -128,7 +128,7 @@ impl Screen {
             let mut string = String::with_capacity(2 + channel.name.len());
             if channel.private {
                 string.push_str("* ");
-                if let Some(recipient) = session.state.get_recipient_unchecked(channel.id) {
+                if let Some(recipient) = session.state.get_recipient_unchecked(channel.id, session.id) {
                     string.push_str(&recipient.name);
                 } else {
                     string.push_str("unknown");
