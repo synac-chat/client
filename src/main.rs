@@ -339,10 +339,6 @@ fn main() {
                 "disconnect" => {
                     usage!(0, "disconnect");
                     let mut session = session.lock().unwrap();
-                    {
-                        let session = require_session!(session);
-                        let _ = session.inner.send(&Packet::Close);
-                    }
                     *session = None;
                 },
                 "forget" => {
@@ -790,9 +786,6 @@ fn main() {
     }
 
     tx_stop.send(()).unwrap();
-    if let Some(ref mut session) = *session.lock().unwrap() {
-        let _ = session.inner.send(&Packet::Close);
-    }
     thread.join().unwrap();
 }
 

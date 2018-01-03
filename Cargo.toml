@@ -1,11 +1,11 @@
 [package]
 authors = ["jD91mZM2 <me@krake.one>"]
 name = "client"
-version = "0.5.0"
+version = "0.5.1"
 [dependencies]
 openssl = "0.9.23"
 rusqlite = "0.13.0"
 rustyline = "1.0.0"
-synac = "0.5.3"
+synac = "0.5.4"
 termion = "1.5.1"
 xdg = "2.1.0"
